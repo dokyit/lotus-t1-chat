@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lotus T1 Chat</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            color: var(--vscode-editor-foreground);
+            background-color: var(--vscode-editor-background);
+            font-family: var(--vscode-font-family);
+        }
+        #sidebar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 48px;
+            background: var(--vscode-sideBar-background, #222);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 8px;
+            z-index: 10;
+        }
+        #main-content {
+            margin-left: 48px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            background: var(--vscode-editor-background);
+        }
+        #model-select {
+            font-size: 1em;
+            padding: 2px 8px;
+        }
+        #chat-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+        }
+        #message-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            max-width: 80%;
+        }
+        .user-message {
+            align-self: flex-end;
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            margin-left: auto;
+        }
+        .bot-message {
+            background-color: var(--vscode-editor-inactiveSelectionBackground);
+            color: var(--vscode-editor-foreground);
+        }
+        .error-message {
+            background-color: var(--vscode-errorForeground);
+            color: var(--vscode-editor-background);
+        }
+        #input-container {
+            display: flex;
+            padding: 10px;
+            background-color: var(--vscode-editor-background);
+            border-top: 1px solid var(--vscode-panel-border);
+        }
+        #message-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid var(--vscode-input-border);
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border-radius: 4px;
+        }
+        #send-button {
+            margin-left: 8px;
+            padding: 8px 16px;
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+    </div>
+    <div id="main-content">
+        <div id="top-bar">
+            <span>Lotus T1 Chat</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <select id="model-select">
+                    <option value="ollama">Ollama (local)</option>
+                    <option value="openRouter">OpenRouter</option>
+                    <option value="deepseek">Deepseek</option>
+                    <option value="simulation">Simulation (GPT-4 Simulated)</option>
+                </select>
+                <select id="model-list" style="margin-left:8px; display:none;"></select>
+                <button id="configure-api-btn" style="font-size:0.95em; padding:2px 8px;">Configure API Key</button>
+                <button id="mcp-servers-btn" style="font-size:0.95em; padding:2px 8px;">MCP Servers</button>
+            </div>
+        </div>
+        <div id="chat-container">
+            <div id="message-container"></div>
+            <div id="input-container">
+                <input type="text" id="message-input" placeholder="Type your message here...">
+                <button id="send-button">Send</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function() {
+            const vscode = acquireVsCodeApi();
+            const messageContainer = document.getElementById('message-container');
+            const messageInput = document.getElementById('message-input');
+            const sendButton = document.getElementById('send-button');
+            const modelSelect = document.getElementById('model-select');
+            const modelList = document.getElementById('model-list');
+            let isWaitingForResponse = false;
+            let currentProvider = modelSelect.value;
+
+            // Send message function
+            function sendMessage() {
+                if (isWaitingForResponse) return;
+                const text = messageInput.value.trim();
+                if (text) {
+                    addMessage(text, 'user');
+                    vscode.postMessage({ command: 'sendMessage', text });
+                    messageInput.value = '';
+                    isWaitingForResponse = true;
+                    sendButton.disabled = true;
+                    messageInput.disabled = true;
+                }
+            }
+
+            // Add message to chat UI
+            function addMessage(text, sender, isError = false) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = isError ? 'message error-message' : `message ${sender}-message`;
+                messageDiv.textContent = text;
+                messageContainer.appendChild(messageDiv);
+                messageContainer.scrollTop = messageContainer.scrollHeight;
+            }
+
+            // Load chat history
+            function loadChatHistory(history) {
+                messageContainer.innerHTML = '';
+                history.forEach(message => {
+                    addMessage(message.content, message.role === 'user' ? 'user' : 'bot');
+                });
+            }
+
+            // --- Dynamic Model List ---
+            async function updateModelList(provider) {
+                vscode.postMessage({ command: 'getAvailableModels', provider });
+            }
+
+            modelSelect.addEventListener('change', () => {
+                currentProvider = modelSelect.value;
+                vscode.postMessage({ command: 'setModelProvider', provider: currentProvider });
+                updateModelList(currentProvider);
+            });
+
+            window.addEventListener('message', event => {
+                const message = event.data;
+                switch (message.command) {
+                    case 'botResponse':
+                        addMessage(message.text, 'bot');
+                        isWaitingForResponse = false;
+                        sendButton.disabled = false;
+                        messageInput.disabled = false;
+                        messageInput.focus();
+                        break;
+                    case 'loadChatHistory':
+                        loadChatHistory(message.history);
+                        break;
+                    case 'error':
+                        addMessage(message.text, 'bot', true);
+                        isWaitingForResponse = false;
+                        sendButton.disabled = false;
+                        messageInput.disabled = false;
+                        break;
+                    case 'availableModels':
+                        if (Array.isArray(message.models) && message.models.length > 0) {
+                            modelList.innerHTML = '';
+                            message.models.forEach(m => {
+                                const opt = document.createElement('option');
+                                opt.value = m.id;
+                                opt.textContent = m.name || m.id;
+                                modelList.appendChild(opt);
+                            });
+                            modelList.style.display = '';
+                        } else {
+                            modelList.style.display = 'none';
+                        }
+                        break;
+                }
+            });
+
+            modelList.addEventListener('change', () => {
+                vscode.postMessage({ command: 'setModel', modelId: modelList.value });
+            });
+
+            // Configure API Key button
+            document.getElementById('configure-api-btn').addEventListener('click', () => {
+                vscode.postMessage({ command: 'configureApiKey', provider: modelSelect.value });
+            });
+
+            // MCP Servers button
+            document.getElementById('mcp-servers-btn').addEventListener('click', () => {
+                vscode.postMessage({ command: 'configureMcpServers' });
+            });
+
+            // Event listeners
+            sendButton.addEventListener('click', sendMessage);
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+
+            // On load, request models for default provider
+            updateModelList(currentProvider);
+            // Request chat history on load
+            vscode.postMessage({ command: 'requestChatHistory' });
+        }());
+    </script>
+</body>
+</html>
+

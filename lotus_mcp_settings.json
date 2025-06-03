@@ -1,0 +1,58 @@
+{
+  "mcpServers": {
+    "claude-task-master": {
+      "timeout": 60,
+      "command": "npx",
+      "args": [
+        "-y",
+        "task-master-ai",
+        "serve",
+        "--mcp"
+      ],
+      "transportType": "stdio"
+    },
+    "brave-search": {
+      "timeout": 60,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env": {
+        "BRAVE_API_KEY": "BSApelIRgTAiAYZS-Yi-6Yco89dGHu9"
+      },
+      "transportType": "stdio"
+    },
+    "exa-mcp-server": {
+      "timeout": 60,
+      "command": "npx",
+      "args": [
+        "-y",
+        "exa-mcp-server"
+      ],
+      "env": {
+        "EXA_API_KEY": "49715288-eb15-4211-9965-901c966d7ac1"
+      },
+      "transportType": "stdio"
+    },
+    "filesystem-mcp": {
+      "timeout": 60,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\Users\\tobyj\\Projects"
+      ],
+      "transportType": "stdio"
+    },
+    "context7": {
+      "timeout": 60,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "transportType": "stdio"
+    }
+  }
+}
